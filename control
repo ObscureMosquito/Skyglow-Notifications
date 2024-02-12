@@ -1,0 +1,9 @@
+Package: com.skyglow.dcnd
+Name: Discord Classic Notifications Daemon
+Version: 1.0
+Architecture: iphoneos-arm
+Description: Low power tweak that runs in the background and fetches discord notifications from a server.
+Maintainer: Requis
+Author: Requis
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000)
