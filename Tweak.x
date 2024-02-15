@@ -41,21 +41,22 @@ static void setupTCPConnection() {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         if (sockfd >= 0) {
             close(sockfd);
-            dispatch_source_t attemptConnectionTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-            dispatch_source_set_timer(attemptConnectionTimer, DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC, (1ull * NSEC_PER_SEC) / 10);
-            dispatch_source_set_event_handler(attemptConnectionTimer, ^{
-            attemptConnection();
-            });
         }
 
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
         struct timeval readTimeout;
-        readTimeout.tv_usec = 0;  // 0 milliseconds
+        readTimeout.tv_sec = 0;  // 0 seconds
+        readTimeout.tv_usec = 0; // 0 milliseconds, adjust if necessary for non-blocking behavior
         setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &readTimeout, sizeof(readTimeout));
         if (sockfd < 0) {
             NSLog(@"Error creating socket");
             return;
         }
+
+        int flags = fcntl(sockfd, F_GETFL, 0);
+        if (flags < 0) return;
+        flags = (flags | O_NONBLOCK);
+        if (fcntl(sockfd, F_SETFL, flags) < 0) return; // Set socket to non-blocking
 
         struct sockaddr_in serv_addr;
         memset(&serv_addr, 0, sizeof(serv_addr));
@@ -64,27 +65,24 @@ static void setupTCPConnection() {
         inet_pton(AF_INET, SERVER_IP, &serv_addr.sin_addr);
 
         if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-            NSLog(@"Connection Failed");
-            close(sockfd);
-            sockfd = -1;
-            dispatch_source_t attemptConnectionTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-            dispatch_source_set_timer(attemptConnectionTimer, DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC, (1ull * NSEC_PER_SEC) / 10);
-            dispatch_source_set_event_handler(attemptConnectionTimer, ^{
-            attemptConnection();
-            });
-            return;
+            if (errno != EINPROGRESS) { // EINPROGRESS is expected for non-blocking connect
+                NSLog(@"Connection Failed");
+                close(sockfd);
+                sockfd = -1;
+                return;
+            }
         }
 
-        // Connection successful, send "RTRV" to the server
+        // Send "RTRV" to the server, consider non-blocking send or move to appropriate place
         const char *retrieveMessage = "RTRV\n";
         send(sockfd, retrieveMessage, strlen(retrieveMessage), 0);
 
-        // Now set up the readTimer
+        // Setup dispatch source for reading from the socket
         if (readTimer) {
             dispatch_source_cancel(readTimer);
+            readTimer = NULL;
         }
-        readTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-        dispatch_source_set_timer(readTimer, DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC, (1ull * NSEC_PER_SEC) / 10);
+        readTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, sockfd, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
         dispatch_source_set_event_handler(readTimer, ^{
             readFromSocket();
         });
@@ -166,73 +164,60 @@ static void sendPingAndAwaitPong() {
 }
 
 static void readFromSocket() {
-    // Check if the socket is invalid; initiate reconnection if necessary
-    if (sockfd < 0) {
-        //NSLog(@"Socket is closed. Attempting to reconnect...");
-        attemptConnection();
-        return; // Exit the function early as there's no valid connection to read from
-    }
+    char buffer[1024]; // Adjust size as necessary
+    ssize_t bytesRead;
 
-    // Send "READ" to the server
-    const char *readMessage = "READ\n";
-    send(sockfd, readMessage, strlen(readMessage), 0);
-
-    char buffer[1024] = {0};
-    ssize_t bytesRead = read(sockfd, buffer, sizeof(buffer) - 1);
-
-    // Check for read errors or no data read
-    if (bytesRead < 0) {
-        //NSLog(@"Error reading from socket or connection was lost. Attempting to reconnect...");
-        tearDownTCPConnection();
-        attemptConnection();
-        return; // Exit the function as an error occurred during reading
-    } else if (bytesRead == 0) {
-        sendPingAndAwaitPong();
-        return;
-    }
-
+    // Attempt to read data from the socket
+    bytesRead = read(sockfd, buffer, sizeof(buffer) - 1);
     if (bytesRead > 0) {
-        lastSuccessfulRead = [NSDate date];
-        NSString *receivedData = [NSString stringWithUTF8String:buffer];
-        NSArray *messages = [receivedData componentsSeparatedByString:@"\n"];
-        
-        // Retrieve the current badge count
-        NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:@"com.Trevir.Discord.badgeCount"] integerValue];
-        
-        for (NSString *fullMessage in messages) {
-            @try {
-                NSRange delimiterRange = [fullMessage rangeOfString:@"|<|>"];
-                if (delimiterRange.location != NSNotFound) {
-                    NSString *uuid = [fullMessage substringToIndex:delimiterRange.location];
-                    NSString *messageDetails = [fullMessage substringFromIndex:delimiterRange.location + delimiterRange.length];
-                    NSArray *messageComponents = [messageDetails componentsSeparatedByString:@"-)("];
-                    if (messageComponents.count >= 3) {
-                        NSString *senderName = messageComponents[0];
-                        NSString *messageContent = messageComponents[1];
-                        NSString *channelId = messageComponents[2]; // Extracted channel ID
+        buffer[bytesRead] = '\0'; // Null-terminate the received data
+
+        char *startOfMessage = strstr(buffer, "|<|>") + 4; // Move past "|<|>"
+        if (startOfMessage) {
+            char *sender = strtok(startOfMessage, "-)("); // Extract sender
+            char *messagePart = strtok(NULL, "-)("); // Extract message
+
+            // Instead of using strtok for the channel ID, find it manually
+            if (sender && messagePart) {
+                // Manually move past the message part to find the start of the channel ID
+                char *channelIdStart = messagePart + strlen(messagePart) + 1; // Move past the null terminator inserted by strtok
+                
+                // Assuming the message ends with "-)(" before the channel ID, skip this part
+                while (*channelIdStart == '-' || *channelIdStart == ')' || *channelIdStart == '(') {
+                    channelIdStart++; // Increment pointer to skip these characters
+                }
+
+                if (*channelIdStart) { // Check if there's something left for channel ID
+                    // Now channelIdStart should point to the beginning of channel ID
+                    NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:@"com.Trevir.Discord.badgeCount"] integerValue];
+                    currentBadgeCount += 1;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        NSString *senderString = [NSString stringWithUTF8String:sender];
+                        NSString *messageString = [NSString stringWithUTF8String:messagePart];
+                        NSString *channelIdString = [NSString stringWithUTF8String:channelIdStart]; // Use the adjusted start pointer
                         
-                        // Increment the badge count
-                        currentBadgeCount += 1;
+                        NSDictionary *userInfo = @{
+                            @"aps" : @{
+                                @"badge" : @(currentBadgeCount),
+                                @"alert" : [NSString stringWithFormat:@"%@: %@", senderString, messageString],
+                                @"channelId" : channelIdString
+                            }
+                        };
+                        NSString *topic = @"com.Trevir.Discord";
+                        APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
+                        [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
                         
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            NSDictionary *userInfo = @{ @"aps" : @{ @"badge" : @(currentBadgeCount), @"alert" : [NSString stringWithFormat:@"%@: %@", senderName, messageContent], @"channelId" : channelId } };
-                            NSString *topic = @"com.Trevir.Discord";
-                            APSIncomingMessage *message = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
-                            [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:message];
-                        });
-                        
-                        // Save the updated badge count
                         [[NSUserDefaults standardUserDefaults] setObject:@(currentBadgeCount) forKey:@"com.Trevir.Discord.badgeCount"];
                         [[NSUserDefaults standardUserDefaults] synchronize];
-                        NSString *ackResponse = [NSString stringWithFormat:@"ACK+%@\n", uuid];
-                        const char *ackCStr = [ackResponse UTF8String];
-                        send(sockfd, ackCStr, strlen(ackCStr), 0);
-                    }
+                    });
+
+                    const char *ackMessage = "ACK+";
+                    write(sockfd, ackMessage, strlen(ackMessage));
                 }
-            } @catch (NSException *exception) {
-                NSLog(@"Exception occurred: %@", exception);
             }
         }
+    } else if (bytesRead == -1) {
+        // Handle read error or non-blocking read return
     }
 }
 
@@ -269,6 +254,10 @@ static void notificationsClearedCallback(CFNotificationCenterRef center, void *o
 %ctor {
     setupReachability();
     setupTCPConnection();
+    //wait before reading to not anhiliate springboard before it fully starts, without blocking the main thread
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        readFromSocket();
+    });
     readFromSocket();
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, notificationsClearedCallback, CFSTR("com.Trevir.Discord.badgeReset"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     
