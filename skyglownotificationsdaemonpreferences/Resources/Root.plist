@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Skyglow Notifications</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.skyglow.sndp</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>label</key>
+			<string>Enabled</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.skyglow.sndp</string>
+			<key>key</key>
+			<string>notificationServerAddress</string>
+			<key>label</key>
+			<string>Server Address:</string>
+			<key>isSecure</key>
+			<false/>
+			<key>keyboardType</key>
+			<string>URL</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.skyglow.sndp</string>
+			<key>key</key>
+			<string>notificationServerPort</string>
+			<key>label</key>
+			<string>Server Port:</string>
+			<key>isSecure</key>
+			<false/>
+			<key>keyboardType</key>
+			<string>NumbersAndPunctuation</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Apply and Respring</string>
+			<key>action</key>
+			<string>applyAndRespringAction:</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Hey! It is necessary that you provide a notification server and port in order for Skyglow Notifications to work, if you dont know what you are doing, check out the guide.</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>SkyGlow Notifications</string>
+</dict>
+</plist>

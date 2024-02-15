@@ -23,7 +23,6 @@ static NSDate *lastSuccessfulRead;
 static dispatch_source_t readTimer;
 static SCNetworkReachabilityRef reachabilityRef;
 static int reconnectionAttempts = 0;
-static int pongTimeoutTimer;
 static dispatch_source_t reconnectTimer;
 
 static void ReachabilityCallback(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info) {
@@ -135,32 +134,6 @@ static void attemptConnection() {
             }
         }
     }
-}
-
-static void sendPingAndAwaitPong() {
-    if (sockfd < 0) // Ensure we have a valid socket, if invalid, exit the function early, and attempt to reconnect instead
-    {
-        tearDownTCPConnection();
-        attemptConnection();
-        return;
-    }
-
-    // Send "PING" message to server
-    const char *pingMessage = "PING\n";
-    send(sockfd, pingMessage, strlen(pingMessage), 0);
-
-    // Set up a timeout to wait for "pong"
-    if (pongTimeoutTimer) {
-        dispatch_source_cancel(pongTimeoutTimer); // Cancel any existing timer
-    }
-    pongTimeoutTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(pongTimeoutTimer, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), DISPATCH_TIME_FOREVER, 0);
-    dispatch_source_set_event_handler(pongTimeoutTimer, ^{
-        NSLog(@"No pong received within timeout. Connection considered failed.");
-        tearDownTCPConnection(); // Close the current connection
-        attemptConnection(); // Attempt to reconnect
-    });
-    dispatch_resume(pongTimeoutTimer);
 }
 
 static void readFromSocket() {
