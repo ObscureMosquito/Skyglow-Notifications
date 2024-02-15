@@ -8,7 +8,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>Skyglow Notifications</string>
+			<string>Skyglow Notifications:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -24,13 +24,19 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Notification Server Adress:</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSEditTextCell</string>
 			<key>defaults</key>
 			<string>com.skyglow.sndp</string>
 			<key>key</key>
 			<string>notificationServerAddress</string>
 			<key>label</key>
-			<string>Server Address:</string>
+			<string>Address:</string>
 			<key>isSecure</key>
 			<false/>
 			<key>keyboardType</key>
@@ -44,25 +50,39 @@
 			<key>key</key>
 			<string>notificationServerPort</string>
 			<key>label</key>
-			<string>Server Port:</string>
+			<string>Port:</string>
 			<key>isSecure</key>
 			<false/>
 			<key>keyboardType</key>
 			<string>NumbersAndPunctuation</string>
 		</dict>
 		<dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string></string>
+        </dict>
+		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Apply and Respring</string>
 			<key>action</key>
-			<string>applyAndRespringAction:</string>
+			<string>applyAndRespringAction</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>Hey! It is necessary that you provide a notification server and port in order for Skyglow Notifications to work, if you dont know what you are doing, check out the guide.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Show me the guide</string>
+			<key>action</key>
+			<string>takeToGuide</string>
 		</dict>
 	</array>
 	<key>title</key>

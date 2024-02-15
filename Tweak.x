@@ -8,8 +8,8 @@
 #import <SystemConfiguration/SystemConfiguration.h>
 #import <UIKit/UIKit.h>
 
-#define SERVER_IP "143.47.32.233" // Replace with your server's IP
-#define SERVER_PORT 5006          // Replace with your server's port
+NSString *SERVER_IP = nil;
+int SERVER_PORT = 0;
 
 // Function declarations
 static void setupTCPConnection();
@@ -225,6 +225,26 @@ static void notificationsClearedCallback(CFNotificationCenterRef center, void *o
 }
 
 %ctor {
+    NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
+    BOOL isEnabled = [[prefs objectForKey:@"enabled"] boolValue];
+    NSString *serverIP = [prefs objectForKey:@"notificationServerAddress"];
+    NSString *serverPortStr = [prefs objectForKey:@"notificationServerPort"];
+    
+    if (!isEnabled || serverIP == nil || serverPortStr == nil) {
+        NSLog(@"Tweak is disabled or server details are missing. Exiting.");
+        return;
+    }
+    
+    // Convert serverPortStr to integer
+    int serverPort = [serverPortStr intValue];
+    if (serverPort <= 0 || serverPort > 65535) {
+        NSLog(@"Invalid server port. Exiting.");
+        return;
+    }
+    
+    SERVER_IP = strdup([serverIP UTF8String]);
+    SERVER_PORT = serverPort;
+
     setupReachability();
     setupTCPConnection();
     //wait before reading to not anhiliate springboard before it fully starts, without blocking the main thread
