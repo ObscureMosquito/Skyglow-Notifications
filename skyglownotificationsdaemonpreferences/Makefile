@@ -9,6 +9,6 @@ SkyglowNotificationsDaemonPreferences_FILES = SNRootListController.m SNGuideView
 SkyglowNotificationsDaemonPreferences_FRAMEWORKS = UIKit
 SkyglowNotificationsDaemonPreferences_PRIVATE_FRAMEWORKS = Preferences
 SkyglowNotificationsDaemonPreferences_INSTALL_PATH = /Library/PreferenceBundles
-SkyglowNotificationsDaemonPreferences_CFLAGS = -fobjc-arc
+SkyglowNotificationsDaemonPreferences_CFLAGS = -fobjc-arc -Wno-arc-performSelector-leaks
 
 include $(THEOS_MAKE_PATH)/bundle.mk

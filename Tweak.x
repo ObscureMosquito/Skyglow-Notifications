@@ -11,6 +11,8 @@
 NSString *SERVER_IP = nil;
 int SERVER_PORT = 0;
 
+@class SBApplication;
+
 // Function declarations
 static void setupTCPConnection();
 static void tearDownTCPConnection();
@@ -224,6 +226,42 @@ static void notificationsClearedCallback(CFNotificationCenterRef center, void *o
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
+void registerMyApplication() {
+    NSLog(@"Registering Discord for remote notifications");
+    // Obtain or create an SBApplication instance for your app
+    Class SBApplicationControllerClass = objc_getClass("SBApplicationController");
+    SBApplication* app = [[SBApplicationControllerClass sharedInstance] applicationWithDisplayIdentifier:@"com.Trevir.Discord"];
+    
+    NSString* environment = @"production";
+    unsigned notificationTypes = 7; // Badges, sounds, and alerts
+    
+    // Assuming you have access to the class that implements the register method
+    [[%c(SBRemoteNotificationServer) sharedInstance] registerApplication:app forEnvironment:environment withTypes:notificationTypes];
+}
+
+void listAllowedRemoteApps() {
+    
+    id registeredBundleIDs = [[%c(SBRemoteNotificationServer) sharedInstance] _allPushRegisteredThirdPartyBundleIDs];
+    
+    // Log the returned object. Assuming it's an array, but it could be any collection type.
+    NSLog(@"All registered third-party bundle IDs: %@", registeredBundleIDs);
+    //if com.Trevir.Discord is not in the list, register it
+    if (![registeredBundleIDs containsObject:@"com.Trevir.Discord"]) {
+        registerMyApplication();
+    }
+    else {
+        //display a UIAlertView to inform the user that the app is already registered
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Discord Notification"
+                                                            message:@"Discord Classic is already registered for remote notifications, if you are not receiving notifications, make sure they are enabled in settings."
+                                                           delegate:nil
+                                                  cancelButtonTitle:@"OK"
+                                                  otherButtonTitles:nil];
+            [alert show];
+        });
+    }
+}
+
 %ctor {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
     BOOL isEnabled = [[prefs objectForKey:@"enabled"] boolValue];
@@ -231,7 +269,9 @@ static void notificationsClearedCallback(CFNotificationCenterRef center, void *o
     NSString *serverPortStr = [prefs objectForKey:@"notificationServerPort"];
     
     if (!isEnabled || serverIP == nil || serverPortStr == nil) {
-        NSLog(@"Tweak is disabled or server details are missing. Exiting.");
+        NSLog(@"Tweak is disabled or server details are missing, running register listener and exiting.");
+        //set up new darwin notification listener for registering the app
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, listAllowedRemoteApps, CFSTR("com.Trevir.Discord.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         return;
     }
     

@@ -73,13 +73,44 @@
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>Hey! It is necessary that you provide a notification server and port in order for Skyglow Notifications to work, if you dont know what you are doing, check out the guide.</string>
 		</dict>
-		<!-- New Section for the Guide Button -->
+		<dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string></string>
+        </dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Register For Notifications:</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Register My Application</string>
+			<key>action</key>
+			<string>showAlert</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>You must register your applications in order to recieve notifications, to do so, tap the button above.</string>
+		</dict>
+		<dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string></string>
+        </dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Guide and Help:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -88,6 +119,12 @@
 			<string>Show me the guide</string>
 			<key>action</key>
 			<string>showGuide</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Hey! It is necessary that you provide a notification server and port in order for Skyglow Notifications to work, if you dont know what you are doing, check out the guide.</string>
 		</dict>
 		</array>
 		<key>title</key>
