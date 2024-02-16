@@ -5,7 +5,7 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = SkyglowNotificationsDaemonPreferences
 
-SkyglowNotificationsDaemonPreferences_FILES = SNRootListController.m
+SkyglowNotificationsDaemonPreferences_FILES = SNRootListController.m SNGuideViewController.m
 SkyglowNotificationsDaemonPreferences_FRAMEWORKS = UIKit
 SkyglowNotificationsDaemonPreferences_PRIVATE_FRAMEWORKS = Preferences
 SkyglowNotificationsDaemonPreferences_INSTALL_PATH = /Library/PreferenceBundles

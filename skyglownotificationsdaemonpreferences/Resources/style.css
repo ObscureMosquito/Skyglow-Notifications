@@ -1,0 +1,85 @@
+body {
+    font-family: Arial, sans-serif;
+    padding: 0 5%;
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.container {
+    max-width: 300px;
+    margin: auto;
+    background-color: #ffffffdf;
+    padding: 11px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    border-radius: 5px;
+}
+
+.content {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.2s ease-out;
+    margin: 0 auto; /* Centers the button horizontally */
+    display: block; /* Ensures the margin auto takes effect */
+}
+
+.collapsible {
+    border-radius: 50px;
+    background: linear-gradient(145deg, #ffffffd9, #f0f0f0);
+    box-shadow:  8px 8px 10px #bebebe,
+                 -8px -8px 10px #ffffff;
+    width: 44%;
+    padding: 8px;
+    text-align: center;
+    background-color: #ffffffaa;
+    color: #333;
+    border: none;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    outline: none;
+    margin: 0 auto; /* Centers the button horizontally */
+    display: block; /* Ensures the margin auto takes effect */
+    
+}
+
+.email-share-button {
+    display: inline-block;
+    background-color: #834c6c;
+    color: white;
+    padding: 7px 11px;
+    text-decoration: none;
+    border-radius: 11px;
+    font-size: 16px;
+    text-align: center;
+    margin: 0 auto; /* Centers the button horizontally */
+    display: block; /* Ensures the margin auto takes effect */
+}
+
+
+.servertitle {
+    font-size: 16px;
+    color: #76559c;
+    text-align: center;
+}
+
+h1 {
+    color: purple;
+    font-size: 18px;
+    padding-bottom: 2px;
+}
+
+h2 {
+    font-size: 14px;
+    color: #76559c;
+}
+
+
+p {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+@media screen and (min-width: 320px) {
+    .container {
+        margin: 10px auto;
+    }
+}

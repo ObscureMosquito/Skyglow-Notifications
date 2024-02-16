@@ -76,16 +76,21 @@
 			<key>footerText</key>
 			<string>Hey! It is necessary that you provide a notification server and port in order for Skyglow Notifications to work, if you dont know what you are doing, check out the guide.</string>
 		</dict>
+		<!-- New Section for the Guide Button -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Show me the guide</string>
 			<key>action</key>
-			<string>takeToGuide</string>
+			<string>showGuide</string>
 		</dict>
-	</array>
-	<key>title</key>
+		</array>
+		<key>title</key>
 	<string>SkyGlow Notifications</string>
 </dict>
 </plist>
