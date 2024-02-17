@@ -84,7 +84,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>Register For Notifications:</string>
+			<string>Various Utilities:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -93,6 +93,14 @@
 			<string>Register My Application</string>
 			<key>action</key>
 			<string>showAlert</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Send Test Notification</string>
+			<key>action</key>
+			<string>testServerConnection</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -119,6 +127,20 @@
 			<string>Show me the guide</string>
 			<key>action</key>
 			<string>showGuide</string>
+		</dict>
+		<dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string></string>
+        </dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Community Discord</string>
+			<key>action</key>
+			<string>takeToDiscord</string>
 		</dict>
 		<dict>
 			<key>cell</key>

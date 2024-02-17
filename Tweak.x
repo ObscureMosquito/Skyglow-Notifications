@@ -262,6 +262,20 @@ void listAllowedRemoteApps() {
     }
 }
 
+//function that sends a test notification to the device
+void testServerConnection() {
+    NSDictionary *userInfo = @{
+        @"aps" : @{
+            @"badge" : @(1),
+            @"alert" : @"Test notification",
+            @"channelId" : @"test"
+        }
+    };
+    NSString *topic = @"com.Trevir.Discord";
+    APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
+    [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
+}
+
 %ctor {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
     BOOL isEnabled = [[prefs objectForKey:@"enabled"] boolValue];
@@ -272,14 +286,22 @@ void listAllowedRemoteApps() {
         NSLog(@"Tweak is disabled or server details are missing, running register listener and exiting.");
         //set up new darwin notification listener for registering the app
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, listAllowedRemoteApps, CFSTR("com.Trevir.Discord.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, testServerConnection, CFSTR("com.Trevir.Discord.testConnection"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         return;
     }
     
     // Convert serverPortStr to integer
     int serverPort = [serverPortStr intValue];
-    if (serverPort <= 0 || serverPort > 65535) {
-        NSLog(@"Invalid server port. Exiting.");
-        return;
+    if (serverPort <= 0 || serverPort > 65535 || serverPort == nil || serverIP == nil) {
+        //wait before displaying the alert to not anhiliate springboard before it fully starts, then display the alert in the main thread
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Discord Notification"
+                                                            message:@"The server port or IP address are invalid, please check the settings."
+                                                           delegate:nil
+                                                  cancelButtonTitle:@"OK"
+                                                  otherButtonTitles:nil];
+            [alert show];
+        });
     }
     
     SERVER_IP = strdup([serverIP UTF8String]);
@@ -288,7 +310,7 @@ void listAllowedRemoteApps() {
     setupReachability();
     setupTCPConnection();
     //wait before reading to not anhiliate springboard before it fully starts, without blocking the main thread
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 9 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         readFromSocket();
     });
     readFromSocket();
