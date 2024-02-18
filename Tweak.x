@@ -138,6 +138,8 @@ static void attemptConnection() {
     }
 }
 
+#import <Foundation/Foundation.h>
+
 static void readFromSocket() {
     char buffer[1024]; // Adjust size as necessary
     ssize_t bytesRead;
@@ -147,49 +149,45 @@ static void readFromSocket() {
     if (bytesRead > 0) {
         buffer[bytesRead] = '\0'; // Null-terminate the received data
 
-        char *startOfMessage = strstr(buffer, "|<|>") + 4; // Move past "|<|>"
-        if (startOfMessage) {
-            char *sender = strtok(startOfMessage, "-)("); // Extract sender
-            char *messagePart = strtok(NULL, "-)("); // Extract message
+        NSError *error = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:buffer length:bytesRead] options:0 error:&error];
+        if (error) {
+            // Handle JSON parsing error
+            NSLog(@"Error parsing JSON: %@", error);
+            return;
+        }
 
-            // Instead of using strtok for the channel ID, find it manually
-            if (sender && messagePart) {
-                // Manually move past the message part to find the start of the channel ID
-                char *channelIdStart = messagePart + strlen(messagePart) + 1; // Move past the null terminator inserted by strtok
-                
-                // Assuming the message ends with "-)(" before the channel ID, skip this part
-                while (*channelIdStart == '-' || *channelIdStart == ')' || *channelIdStart == '(') {
-                    channelIdStart++; // Increment pointer to skip these characters
+        NSString *sender = json[@"sender"];
+        NSString *message = json[@"message"];
+        NSString *topic = json[@"topic"];
+
+        if (sender && message) {
+            NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]] integerValue];
+            currentBadgeCount += 1;
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSDictionary *apsDict = @{
+                    @"badge": @(currentBadgeCount),
+                    @"alert": [NSString stringWithFormat:@"%@: %@", sender, message]
+                };
+
+                NSMutableDictionary *userInfo = [NSMutableDictionary dictionaryWithDictionary:@{@"aps": apsDict}];
+
+                // Extracting extra keys from the JSON response and adding them to the userInfo dictionary
+                NSDictionary *extraInfo = json[@"extra"];
+                if (extraInfo && [extraInfo isKindOfClass:[NSDictionary class]]) {
+                    [userInfo addEntriesFromDictionary:extraInfo];
                 }
 
-                if (*channelIdStart) { // Check if there's something left for channel ID
-                    // Now channelIdStart should point to the beginning of channel ID
-                    NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:@"com.Trevir.Discord.badgeCount"] integerValue];
-                    currentBadgeCount += 1;
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        NSString *senderString = [NSString stringWithUTF8String:sender];
-                        NSString *messageString = [NSString stringWithUTF8String:messagePart];
-                        NSString *channelIdString = [NSString stringWithUTF8String:channelIdStart]; // Use the adjusted start pointer
-                        
-                        NSDictionary *userInfo = @{
-                            @"aps" : @{
-                                @"badge" : @(currentBadgeCount),
-                                @"alert" : [NSString stringWithFormat:@"%@: %@", senderString, messageString],
-                                @"channelId" : channelIdString
-                            }
-                        };
-                        NSString *topic = @"com.Trevir.Discord";
-                        APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
-                        [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
-                        
-                        [[NSUserDefaults standardUserDefaults] setObject:@(currentBadgeCount) forKey:@"com.Trevir.Discord.badgeCount"];
-                        [[NSUserDefaults standardUserDefaults] synchronize];
-                    });
+                APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
+                [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
 
-                    const char *ackMessage = "ACK+";
-                    write(sockfd, ackMessage, strlen(ackMessage));
-                }
-            }
+                [[NSUserDefaults standardUserDefaults] setObject:@(currentBadgeCount) forKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+            });
+
+            const char *ackMessage = "ACK+";
+            write(sockfd, ackMessage, strlen(ackMessage));
         }
     } else if (bytesRead == -1) {
         // Handle read error or non-blocking read return
