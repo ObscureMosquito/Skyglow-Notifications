@@ -7,6 +7,7 @@
 
 @implementation SNRootListController
 
+
 - (NSArray *)specifiers {
 	if (!_specifiers) {
 		_specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
@@ -15,9 +16,11 @@
 	return _specifiers;
 }
 
+
 - (void)applyAndRespringAction {
 	system("killall -9 SpringBoard");
 }
+
 
 - (void)showGuide {
     GuideViewController *guideVC = [[GuideViewController alloc] init];
@@ -34,6 +37,7 @@
     [alert show];
 }
 
+
 - (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
     if (buttonIndex == 1) { 
         if ([alertView.title isEqualToString:@"Please Disable Daemon"]) {
@@ -41,15 +45,17 @@
         } else if ([alertView.title isEqualToString:@"Register Application"]) {
             [self registerApp];
         } else if ([alertView.title isEqualToString:@"Test Connection"]) {
-            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.Trevir.Discord.testConnection"), NULL, NULL, TRUE);
+            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.Skyglow.Notifications.testConnection"), NULL, NULL, TRUE);
         }
     }
 }
 
+
 - (void)registerApp {
 	NSLog(@"Registering application");
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.Trevir.Discord.register"), NULL, NULL, TRUE);
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.Skyglow.Notifications.register"), NULL, NULL, TRUE);
 }
+
 
 - (void)testServerConnection {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
@@ -70,6 +76,7 @@
         [alert show];
     }
 }
+
 
 - (void)disableDaemonAndRespring {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];

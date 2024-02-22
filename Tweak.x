@@ -1,31 +1,9 @@
-#import <Foundation/Foundation.h>
-#import <substrate.h>
-#import <CoreFoundation/CoreFoundation.h>
-#import <sys/socket.h>
-#import <netinet/in.h>
-#import <arpa/inet.h>
-#import <unistd.h>
-#import <SystemConfiguration/SystemConfiguration.h>
-#import <UIKit/UIKit.h>
+#import "KeyManager.h"
+#import "Tweak.h"
+#import "CommonDefinitions.h"
+#import "SettingsUtilities.h"
 
-NSString *SERVER_IP = nil;
-int SERVER_PORT = 0;
 
-@class SBApplication;
-
-// Function declarations
-static void setupTCPConnection();
-static void tearDownTCPConnection();
-static void readFromSocket();
-static void cleanUp();
-static void setupReachability();
-static void attemptConnection();
-static int sockfd = -1;
-static NSDate *lastSuccessfulRead;
-static dispatch_source_t readTimer;
-static SCNetworkReachabilityRef reachabilityRef;
-static int reconnectionAttempts = 0;
-static dispatch_source_t reconnectTimer;
 
 static void ReachabilityCallback(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info) {
     Boolean isReachable = flags & kSCNetworkFlagsReachable;
@@ -37,6 +15,7 @@ static void ReachabilityCallback(SCNetworkReachabilityRef target, SCNetworkReach
         tearDownTCPConnection();
     }
 }
+
 
 static void setupTCPConnection() {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -74,10 +53,6 @@ static void setupTCPConnection() {
             }
         }
 
-        // Send "RTRV" to the server, consider non-blocking send or move to appropriate place
-        const char *retrieveMessage = "RTRV\n";
-        send(sockfd, retrieveMessage, strlen(retrieveMessage), 0);
-
         // Setup dispatch source for reading from the socket
         if (readTimer) {
             dispatch_source_cancel(readTimer);
@@ -105,6 +80,7 @@ static void tearDownTCPConnection() {
     });
 }
 
+
 static void checkAndAttemptReconnect() {
     if (reconnectionAttempts < 3) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -118,6 +94,7 @@ static void checkAndAttemptReconnect() {
         reconnectionAttempts = 0; // Reset attempts for future reconnections
     }
 }
+
 
 static void attemptConnection() {
     if (reachabilityRef) {
@@ -138,59 +115,77 @@ static void attemptConnection() {
     }
 }
 
-#import <Foundation/Foundation.h>
+
+void xorDecrypt(const char *input, char *output, const char *key, size_t len) {
+    NSLog(@"Decrypting message with key, and message: %s %s", key, input);
+    size_t keyLen = strlen(key);
+    for (size_t i = 0; i < len; ++i) {
+        output[i] = input[i] ^ key[i % keyLen];
+    }
+    output[len] = '\0';
+}
+
 
 static void readFromSocket() {
-    char buffer[1024]; // Adjust size as necessary
+    char buffer[1024];
     ssize_t bytesRead;
 
     // Attempt to read data from the socket
     bytesRead = read(sockfd, buffer, sizeof(buffer) - 1);
     if (bytesRead > 0) {
-        buffer[bytesRead] = '\0'; // Null-terminate the received data
+        buffer[bytesRead] = '\0';
 
-        NSError *error = nil;
-        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:buffer length:bytesRead] options:0 error:&error];
-        if (error) {
-            // Handle JSON parsing error
-            NSLog(@"Error parsing JSON: %@", error);
-            return;
+        // Decrypt the received data using the XOR key
+        char decryptedBuffer[1024];
+        XOR_KEY = strdup([[NSUserDefaults standardUserDefaults] stringForKey:@"XORKey"].UTF8String);
+        // NSLog(@"XOR Key: %s", XOR_KEY);
+        xorDecrypt(buffer, decryptedBuffer, XOR_KEY, bytesRead);
+        // NSLog(@"Decrypted message: %s", decryptedBuffer);
+
+        NSData *decryptedData = [NSData dataWithBytes:decryptedBuffer length:strlen(decryptedBuffer)];
+        NSError *error;
+        // NSString *decryptedString = [[NSString alloc] initWithData:decryptedData encoding:NSUTF8StringEncoding];
+        // NSLog(@"Decrypted string: %@", decryptedString);
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:decryptedData options:0 error:&error];
+
+        if (json) {
+
+            NSString *sender = json[@"sender"];
+            NSString *message = json[@"message"];
+            NSString *topic = json[@"topic"];
+
+            NSLog(@"Assigned variables");
+
+            if (sender && message && topic) {
+                NSLog(@"Received message from %@: %@", sender, message);
+                NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]] integerValue];
+                currentBadgeCount += 1;
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    NSDictionary *apsDict = @{
+                        @"badge": @(currentBadgeCount),
+                        @"alert": [NSString stringWithFormat:@"%@: %@", sender, message]
+                    };
+
+                    NSMutableDictionary *userInfo = [NSMutableDictionary dictionaryWithDictionary:@{@"aps": apsDict}];
+
+                    // Extracting extra keys from the JSON response and adding them to the userInfo dictionary
+                    NSDictionary *extraInfo = json[@"extra"];
+                    if (extraInfo && [extraInfo isKindOfClass:[NSDictionary class]]) {
+                        [userInfo addEntriesFromDictionary:extraInfo];
+                    }
+
+                    APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
+                    [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
+
+                    [[NSUserDefaults standardUserDefaults] setObject:@(currentBadgeCount) forKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]];
+                    [[NSUserDefaults standardUserDefaults] synchronize];
+                });
+            }
         }
 
-        NSString *sender = json[@"sender"];
-        NSString *message = json[@"message"];
-        NSString *topic = json[@"topic"];
-
-        if (sender && message) {
-            NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]] integerValue];
-            currentBadgeCount += 1;
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSDictionary *apsDict = @{
-                    @"badge": @(currentBadgeCount),
-                    @"alert": [NSString stringWithFormat:@"%@: %@", sender, message]
-                };
-
-                NSMutableDictionary *userInfo = [NSMutableDictionary dictionaryWithDictionary:@{@"aps": apsDict}];
-
-                // Extracting extra keys from the JSON response and adding them to the userInfo dictionary
-                NSDictionary *extraInfo = json[@"extra"];
-                if (extraInfo && [extraInfo isKindOfClass:[NSDictionary class]]) {
-                    [userInfo addEntriesFromDictionary:extraInfo];
-                }
-
-                APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
-                [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
-
-                [[NSUserDefaults standardUserDefaults] setObject:@(currentBadgeCount) forKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]];
-                [[NSUserDefaults standardUserDefaults] synchronize];
-            });
-
-            const char *ackMessage = "ACK+";
-            write(sockfd, ackMessage, strlen(ackMessage));
-        }
     } else if (bytesRead == -1) {
-        // Handle read error or non-blocking read return
+        return;
     }
 }
 
@@ -218,62 +213,6 @@ static void setupReachability() {
 }
 
 
-static void notificationsClearedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    // Reset the badge count
-    [[NSUserDefaults standardUserDefaults] setObject:@(0) forKey:@"com.Trevir.Discord.badgeCount"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-}
-
-void registerMyApplication() {
-    NSLog(@"Registering Discord for remote notifications");
-    // Obtain or create an SBApplication instance for your app
-    Class SBApplicationControllerClass = objc_getClass("SBApplicationController");
-    SBApplication* app = [[SBApplicationControllerClass sharedInstance] applicationWithDisplayIdentifier:@"com.Trevir.Discord"];
-    
-    NSString* environment = @"production";
-    unsigned notificationTypes = 7; // Badges, sounds, and alerts
-    
-    // Assuming you have access to the class that implements the register method
-    [[%c(SBRemoteNotificationServer) sharedInstance] registerApplication:app forEnvironment:environment withTypes:notificationTypes];
-}
-
-void listAllowedRemoteApps() {
-    
-    id registeredBundleIDs = [[%c(SBRemoteNotificationServer) sharedInstance] _allPushRegisteredThirdPartyBundleIDs];
-    
-    // Log the returned object. Assuming it's an array, but it could be any collection type.
-    NSLog(@"All registered third-party bundle IDs: %@", registeredBundleIDs);
-    //if com.Trevir.Discord is not in the list, register it
-    if (![registeredBundleIDs containsObject:@"com.Trevir.Discord"]) {
-        registerMyApplication();
-    }
-    else {
-        //display a UIAlertView to inform the user that the app is already registered
-        dispatch_async(dispatch_get_main_queue(), ^{
-            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Discord Notification"
-                                                            message:@"Discord Classic is already registered for remote notifications, if you are not receiving notifications, make sure they are enabled in settings."
-                                                           delegate:nil
-                                                  cancelButtonTitle:@"OK"
-                                                  otherButtonTitles:nil];
-            [alert show];
-        });
-    }
-}
-
-//function that sends a test notification to the device
-void testServerConnection() {
-    NSDictionary *userInfo = @{
-        @"aps" : @{
-            @"badge" : @(1),
-            @"alert" : @"Test notification",
-            @"channelId" : @"test"
-        }
-    };
-    NSString *topic = @"com.Trevir.Discord";
-    APSIncomingMessage *messageObj = [[%c(APSIncomingMessage) alloc] initWithTopic:topic userInfo:userInfo];
-    [[%c(SBRemoteNotificationServer) sharedInstance] connection:nil didReceiveIncomingMessage:messageObj];
-}
-
 %ctor {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
     BOOL isEnabled = [[prefs objectForKey:@"enabled"] boolValue];
@@ -282,18 +221,17 @@ void testServerConnection() {
     
     if (!isEnabled || serverIP == nil || serverPortStr == nil) {
         NSLog(@"Tweak is disabled or server details are missing, running register listener and exiting.");
-        //set up new darwin notification listener for registering the app
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, listAllowedRemoteApps, CFSTR("com.Trevir.Discord.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, testServerConnection, CFSTR("com.Trevir.Discord.testConnection"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        // Set up new darwin notification listener for registering and testing the app
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, listAllowedRemoteApps, CFSTR("com.Skyglow.Notifications.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, testServerConnection, CFSTR("com.Skyglow.Notifications.testConnection"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         return;
     }
     
-    // Convert serverPortStr to integer
     int serverPort = [serverPortStr intValue];
     if (serverPort <= 0 || serverPort > 65535 || serverPort == nil || serverIP == nil) {
-        //wait before displaying the alert to not anhiliate springboard before it fully starts, then display the alert in the main thread
+        // Wait before displaying the alert to not anhiliate springboard before it fully starts, then display the alert in the main thread
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Discord Notification"
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Skyglow Notifications"
                                                             message:@"The server port or IP address are invalid, please check the settings."
                                                            delegate:nil
                                                   cancelButtonTitle:@"OK"
@@ -305,15 +243,13 @@ void testServerConnection() {
     SERVER_IP = strdup([serverIP UTF8String]);
     SERVER_PORT = serverPort;
 
+    checkAndRefreshKeyIfNeeded();
     setupReachability();
-    setupTCPConnection();
-    //wait before reading to not anhiliate springboard before it fully starts, without blocking the main thread
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 9 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        readFromSocket();
+    tearDownTCPConnection();
+    // Dont inmediately connect to the server, let SpringBoard start first
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 7 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        setupTCPConnection();
     });
-    readFromSocket();
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, notificationsClearedCallback, CFSTR("com.Trevir.Discord.badgeReset"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    
 }
 
 %dtor {
