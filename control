@@ -2,7 +2,7 @@ Package: com.skyglow.snd
 Name: Skyglow Notifications Daemon
 Version: 1.0
 Architecture: iphoneos-arm
-Description: Low power tweak that runs in the background and fetches notifications from a server.
+Description: Low power tweak that runs in the background and fetches notifications from a server for all of your apps.
 Maintainer: Requis
 Author: Requis
 Section: Tweaks

@@ -9,11 +9,50 @@ static void ReachabilityCallback(SCNetworkReachabilityRef target, SCNetworkReach
     Boolean isReachable = flags & kSCNetworkFlagsReachable;
     if (isReachable && sockfd < 0) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            NSLog(@"Internet connectivity regained. Attempting to setup TCP connection.");
+            currentReconnectionAttempt = 0; // Reset attempts as we have internet connectivity now
             setupTCPConnection();
         });
     } else if (!isReachable && sockfd >= 0) {
+        NSLog(@"Internet connectivity lost. Tearing down TCP connection.");
         tearDownTCPConnection();
     }
+}
+
+
+static void attemptReconnectWithBackoff() {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+
+    // NSLog(@"Attempting to reconnect with backoff");
+    if (currentReconnectionAttempt < maxReconnectionAttempts) {
+        NSTimeInterval delay = reconnectionDelayTimes[currentReconnectionAttempt];
+        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC));
+        dispatch_after(popTime, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
+            if (sockfd < 0) { // Only attempt to reconnect if the socket is not already open
+                NSLog(@"Attempting to reconnect, attempt %d", currentReconnectionAttempt + 1);
+                setupTCPConnection();
+            }
+        });
+        currentReconnectionAttempt++;
+    } else {
+        // NSLog(@"Max reconnection attempts reached. Waiting for a notable event to reattempt.");
+        tearDownTCPConnection();
+        currentReconnectionAttempt = 0;
+    }
+    });
+}
+
+static void setupReachability() {
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_len = sizeof(address);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = inet_addr(SERVER_IP);
+
+    reachabilityRef = SCNetworkReachabilityCreateWithAddress(NULL, (struct sockaddr *)&address);
+    SCNetworkReachabilityContext context = {0, NULL, NULL, NULL, NULL};
+    SCNetworkReachabilitySetCallback(reachabilityRef, ReachabilityCallback, &context);
+    SCNetworkReachabilityScheduleWithRunLoop(reachabilityRef, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
 }
 
 
@@ -24,19 +63,21 @@ static void setupTCPConnection() {
         }
 
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        struct timeval readTimeout;
-        readTimeout.tv_sec = 0;  // 0 seconds
-        readTimeout.tv_usec = 0; // 0 milliseconds, adjust if necessary for non-blocking behavior
-        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &readTimeout, sizeof(readTimeout));
         if (sockfd < 0) {
-            NSLog(@"Error creating socket");
+            // NSLog(@"Error creating socket");
+            attemptReconnectWithBackoff();
             return;
         }
 
+        // Make the socket non-blocking
         int flags = fcntl(sockfd, F_GETFL, 0);
-        if (flags < 0) return;
-        flags = (flags | O_NONBLOCK);
-        if (fcntl(sockfd, F_SETFL, flags) < 0) return; // Set socket to non-blocking
+        if (flags < 0 || fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) < 0) {
+            // NSLog(@"Error setting socket to non-blocking");
+            close(sockfd);
+            sockfd = -1;
+            attemptReconnectWithBackoff();
+            return;
+        }
 
         struct sockaddr_in serv_addr;
         memset(&serv_addr, 0, sizeof(serv_addr));
@@ -44,25 +85,48 @@ static void setupTCPConnection() {
         serv_addr.sin_port = htons(SERVER_PORT);
         inet_pton(AF_INET, SERVER_IP, &serv_addr.sin_addr);
 
-        if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-            if (errno != EINPROGRESS) { // EINPROGRESS is expected for non-blocking connect
-                NSLog(@"Connection Failed");
-                close(sockfd);
-                sockfd = -1;
-                return;
-            }
+        if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 && errno != EINPROGRESS) {
+            // NSLog(@"Initial connection attempt failed");
+            close(sockfd);
+            sockfd = -1;
+            attemptReconnectWithBackoff();
+            return;
         }
 
-        // Setup dispatch source for reading from the socket
-        if (readTimer) {
-            dispatch_source_cancel(readTimer);
-            readTimer = NULL;
+        // Setup dispatch source for reading from the socket if connection was successful
+        if (!readTimer) {
+            // NSLog(@"Setting up read timer");
+            readTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, sockfd, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
+            dispatch_source_set_event_handler(readTimer, ^{
+                char buffer[1024]; // Adjust buffer size as necessary
+                ssize_t bytesRead;
+
+                    // NSLog(@"Received %ld bytes from the server", bytesRead);
+                    readFromSocket(); // Process the received data
+                    bytesRead = read(sockfd, buffer, sizeof(buffer) - 1);
+
+                if (bytesRead == 0) {
+                    // Server closed the connection
+                    // NSLog(@"Server closed the connection.");
+                    close(sockfd);
+                    sockfd = -1;
+                    dispatch_source_cancel(readTimer);
+                    readTimer = NULL;
+                    attemptReconnectWithBackoff();
+                } else {
+                    // An error occurred
+                    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                        // NSLog(@"Socket read error, errno: %d", errno);
+                        close(sockfd);
+                        sockfd = -1;
+                        dispatch_source_cancel(readTimer);
+                        readTimer = NULL;
+                        attemptReconnectWithBackoff();
+                    }
+                }
+            });
+            dispatch_resume(readTimer);
         }
-        readTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, sockfd, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-        dispatch_source_set_event_handler(readTimer, ^{
-            readFromSocket();
-        });
-        dispatch_resume(readTimer);
     });
 }
 
@@ -81,43 +145,8 @@ static void tearDownTCPConnection() {
 }
 
 
-static void checkAndAttemptReconnect() {
-    if (reconnectionAttempts < 3) {
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            if (sockfd < 0) { // Only attempt to reconnect if the socket is not already open
-                reconnectionAttempts++;
-                setupTCPConnection(); // Attempt to establish a new connection
-            }
-        });
-    } else {
-        tearDownTCPConnection();
-        reconnectionAttempts = 0; // Reset attempts for future reconnections
-    }
-}
-
-
-static void attemptConnection() {
-    if (reachabilityRef) {
-        SCNetworkReachabilityFlags flags;
-        if (SCNetworkReachabilityGetFlags(reachabilityRef, &flags) && (flags & kSCNetworkFlagsReachable) && sockfd < 0) {
-            // If there's an active internet connection and the socket is closed, attempt to reconnect
-            if (!reconnectTimer) {
-                reconnectTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-                dispatch_source_set_timer(reconnectTimer, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), DISPATCH_TIME_FOREVER, 1 * NSEC_PER_SEC);
-                dispatch_source_set_event_handler(reconnectTimer, ^{
-                    checkAndAttemptReconnect();
-                    dispatch_source_cancel(reconnectTimer);
-                    reconnectTimer = NULL; // Reset timer after firing
-                });
-                dispatch_resume(reconnectTimer);
-            }
-        }
-    }
-}
-
-
 void xorDecrypt(const char *input, char *output, const char *key, size_t len) {
-    NSLog(@"Decrypting message with key, and message: %s %s", key, input);
+    // NSLog(@"Decrypting message with key, and message: %s %s", key, input);
     size_t keyLen = strlen(key);
     for (size_t i = 0; i < len; ++i) {
         output[i] = input[i] ^ key[i % keyLen];
@@ -149,15 +178,17 @@ static void readFromSocket() {
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:decryptedData options:0 error:&error];
 
         if (json) {
+            currentReconnectionAttempt = 0; // Reset attempts as we have received a message
 
             NSString *sender = json[@"sender"];
             NSString *message = json[@"message"];
             NSString *topic = json[@"topic"];
 
-            NSLog(@"Assigned variables");
+            // NSLog(@"Assigned variables");
+            // Logging taken out for performance reasons
 
             if (sender && message && topic) {
-                NSLog(@"Received message from %@: %@", sender, message);
+                // NSLog(@"Received message from %@: %@", sender, message);
                 NSInteger currentBadgeCount = [[[NSUserDefaults standardUserDefaults] objectForKey:[NSString stringWithFormat:@"com.%@.badgeCount", topic]] integerValue];
                 currentBadgeCount += 1;
 
@@ -199,20 +230,6 @@ static void cleanUp() {
 }
 
 
-static void setupReachability() {
-    struct sockaddr_in address;
-    memset(&address, 0, sizeof(address));
-    address.sin_len = sizeof(address);
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = inet_addr(SERVER_IP);
-
-    reachabilityRef = SCNetworkReachabilityCreateWithAddress(NULL, (struct sockaddr *)&address);
-    SCNetworkReachabilityContext context = {0, NULL, NULL, NULL, NULL};
-    SCNetworkReachabilitySetCallback(reachabilityRef, ReachabilityCallback, &context);
-    SCNetworkReachabilityScheduleWithRunLoop(reachabilityRef, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-}
-
-
 %ctor {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
     BOOL isEnabled = [[prefs objectForKey:@"enabled"] boolValue];
@@ -220,7 +237,7 @@ static void setupReachability() {
     NSString *serverPortStr = [prefs objectForKey:@"notificationServerPort"];
     
     if (!isEnabled || serverIP == nil || serverPortStr == nil) {
-        NSLog(@"Tweak is disabled or server details are missing, running register listener and exiting.");
+        // NSLog(@"Tweak is disabled or server details are missing, running register listener and exiting.");
         // Set up new darwin notification listener for registering and testing the app
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, listAllowedRemoteApps, CFSTR("com.Skyglow.Notifications.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, testServerConnection, CFSTR("com.Skyglow.Notifications.testConnection"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
