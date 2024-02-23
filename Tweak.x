@@ -107,7 +107,7 @@ static void setupTCPConnection() {
 
                 if (bytesRead == 0) {
                     // Server closed the connection
-                    // NSLog(@"Server closed the connection.");
+                     NSLog(@"Server closed the connection.");
                     close(sockfd);
                     sockfd = -1;
                     dispatch_source_cancel(readTimer);
@@ -239,7 +239,8 @@ static void cleanUp() {
     if (!isEnabled || serverIP == nil || serverPortStr == nil) {
         // NSLog(@"Tweak is disabled or server details are missing, running register listener and exiting.");
         // Set up new darwin notification listener for registering and testing the app
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, listAllowedRemoteApps, CFSTR("com.Skyglow.Notifications.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, checkAndRegisterApplication, CFSTR("com.Skyglow.Notifications.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, checkAndUnregisterApplication, CFSTR("com.Skyglow.Notifications.unregister"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, testServerConnection, CFSTR("com.Skyglow.Notifications.testConnection"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         return;
     }
@@ -260,7 +261,7 @@ static void cleanUp() {
     SERVER_IP = strdup([serverIP UTF8String]);
     SERVER_PORT = serverPort;
 
-    checkAndRefreshKeyIfNeeded();
+    requestKeyRefresh();
     setupReachability();
     tearDownTCPConnection();
     // Dont inmediately connect to the server, let SpringBoard start first

@@ -12,13 +12,11 @@ void setupKeyRefreshTimer() {
     dispatch_resume(timer);
 }
 
-void requestKeyRefresh() {
-    __block BOOL responseReceived = NO;
-    __block BOOL shouldCleanup = NO;
-    
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // NSLog(@"Requesting key refresh");
 
+void requestKeyRefresh() {
+    // NSLog(@"Requesting key refresh");
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         int tempSockfd = socket(AF_INET, SOCK_STREAM, 0);
         if (tempSockfd < 0) {
             NSLog(@"Error creating socket for key refresh");
@@ -31,51 +29,63 @@ void requestKeyRefresh() {
         serv_addr.sin_port = htons(5006); // Ensure port matches server's listening port
         inet_pton(AF_INET, SERVER_IP, &serv_addr.sin_addr);
 
+        if (connect(tempSockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+            NSLog(@"Error connecting to server");
+            close(tempSockfd);
+            return;
+        }
+
         const char *refreshMessage = "REFRESH";
         send(tempSockfd, refreshMessage, strlen(refreshMessage), 0);
 
-        // Set up a timeout using dispatch_after
-        dispatch_time_t delay = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC));
-        dispatch_after(delay, dispatch_get_main_queue(), ^{
-            if (!responseReceived) {
-                NSLog(@"Timeout: No response received within 5 seconds.");
-                shouldCleanup = YES;
-            }
-        });
+        // Set socket to non-blocking mode
+        int flags = fcntl(tempSockfd, F_GETFL, 0);
+        fcntl(tempSockfd, F_SETFL, flags | O_NONBLOCK);
 
-        char buffer[1024] = {0};
-        ssize_t bytesRead = read(tempSockfd, buffer, sizeof(buffer) - 1);
-        if (bytesRead > 0) {
-            responseReceived = YES;
-            shouldCleanup = YES;
-            buffer[bytesRead] = '\0';
-            NSString *encryptedKeyString = [NSString stringWithUTF8String:buffer];
-            NSString *newKey = decryptWithPrivateKey(encryptedKeyString);
+        // Use select() to wait for the socket to become readable
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(tempSockfd, &readfds);
+        struct timeval tv;
+        tv.tv_sec = 5;  // 5 seconds timeout
+        tv.tv_usec = 0;
 
-            if (newKey) {
-                if (XOR_KEY) free(XOR_KEY);
-                XOR_KEY = strdup([newKey UTF8String]);
-                shouldCleanup = YES;
-                // NSLog(@"Successfully decrypted and updated the new key: %@", newKey);
-
-                [[NSUserDefaults standardUserDefaults] setObject:newKey forKey:@"XORKey"];
-                [[NSUserDefaults standardUserDefaults] setObject:[NSDate date] forKey:@"LastKeyRefreshTime"];
-                [[NSUserDefaults standardUserDefaults] synchronize];
-            } else {
-                NSLog(@"Failed to decrypt the new key.");
-                shouldCleanup = YES;
-            }
+        int selectResult = select(tempSockfd + 1, &readfds, NULL, NULL, &tv);
+        if (selectResult == -1) {
+            NSLog(@"Select error");
+        } else if (selectResult == 0) {
+            NSLog(@"Timeout: No response received within 5 seconds.");
         } else {
-            NSLog(@"Failed to read key refresh response.");
-            shouldCleanup = YES;
+            if (FD_ISSET(tempSockfd, &readfds)) {
+                char buffer[1024] = {0};
+                ssize_t bytesRead = read(tempSockfd, buffer, sizeof(buffer) - 1);
+                if (bytesRead > 0) {
+                    buffer[bytesRead] = '\0';
+                    NSString *encryptedKeyString = [NSString stringWithUTF8String:buffer];
+                    NSString *newKey = decryptWithPrivateKey(encryptedKeyString);
+
+                    if (newKey) {
+                        if (XOR_KEY) free(XOR_KEY);
+                        XOR_KEY = strdup([newKey UTF8String]);
+
+                        [[NSUserDefaults standardUserDefaults] setObject:newKey forKey:@"XORKey"];
+                        [[NSUserDefaults standardUserDefaults] setObject:[NSDate date] forKey:@"LastKeyRefreshTime"];
+                        [[NSUserDefaults standardUserDefaults] synchronize];
+                        NSLog(@"Successfully decrypted and updated the new key: %@", newKey);
+                    } else {
+                        NSLog(@"Failed to decrypt the new key.");
+                    }
+                } else {
+                    NSLog(@"Failed to read key refresh response or connection closed by server.");
+                }
+            }
         }
 
-        if (shouldCleanup) {
-            NSLog(@"Closing temporary socket");
-            close(tempSockfd);
-        }
+        NSLog(@"Closing temporary socket");
+        close(tempSockfd);
     });
 }
+
 
 
 NSString *decryptWithPrivateKey(NSString *encryptedDataString) {

@@ -2,6 +2,7 @@
 
 @class SBApplication;
 
-void registerMyApplication();
+void checkAndRegisterApplication();
+void checkAndUnregisterApplication();
 void listAllowedRemoteApps();
 void testServerConnection();
