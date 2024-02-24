@@ -64,27 +64,6 @@
 }
 
 
-- (void)sendTestNotification {
-    NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
-    BOOL isEnabled = [[prefs objectForKey:@"enabled"] boolValue];
-    if (isEnabled) {
-        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Please Disable Daemon" 
-                                                        message:@"You can only test the connection while the daemon is disabled, would you like to disable the daemon, restart springboard, and proceed? (You will need to come back and try the test after springboard restarts.)" 
-                                                       delegate:self 
-                                              cancelButtonTitle:@"Cancel" 
-                                              otherButtonTitles:@"Yes, Respring", nil];
-        [alert show];
-    } else if (!isEnabled) {
-        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Test Notification" 
-                                                        message:@"Send a test notification to the device" 
-                                                       delegate:self 
-                                              cancelButtonTitle:@"Cancel" 
-                                              otherButtonTitles:@"Proceed", nil];
-        [alert show];
-    }
-}
-
-
 - (void)disableDaemonAndRespring {
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
     //set the enabled key to false for NSUserDefaults specific to com.skyglow.sndp
@@ -95,55 +74,79 @@
     system("killall -9 SpringBoard");
 }
 
-- (void)showGeneratingKeysAlert {
-    alertView = [[UIAlertView alloc] initWithTitle:@"Generating Keys"
-                                           message:@"Please wait...\n\n\n" // Extra space for the spinner
-                                          delegate:nil
-                                 cancelButtonTitle:nil
-                                 otherButtonTitles:nil];
-    activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-    // Position the spinner in the center of the alert view
-    activityIndicatorView.center = CGPointMake(alertView.bounds.size.width / 2, alertView.bounds.size.height - 50);
-    [alertView addSubview:activityIndicatorView];
-    [activityIndicatorView startAnimating];
-    [alertView show];
-    
-    // Move the key generation to a background thread to keep the UI responsive
+
+- (void)generateSSLCertificate {
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Generating Certificate"
+                                                    message:@"\n" // Increase the number of line breaks for additional spacing
+                                                   delegate:nil
+                                          cancelButtonTitle:nil
+                                          otherButtonTitles:nil];
+    UIActivityIndicatorView *activityView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+
+    // Show the alert first to get its dimensions
+    [alert show];
+
+    // Delayed adjustment to attempt to accommodate the alert's dynamic layout
+    double delayInSeconds = 0.1;
+    dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+    dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+        // Adjust spinner's frame directly to move it lower and possibly make the alert look "thinner"
+        CGRect alertBounds = alert.bounds;
+        CGPoint center = CGPointMake(CGRectGetMidX(alertBounds), CGRectGetMidY(alertBounds) + 20); // Adjust the Y offset as needed
+        activityView.center = center;
+        [alert addSubview:activityView];
+        [activityView startAnimating];
+    });
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        generateSSLCertificate();
-        
-        // Once done, dismiss the alert on the main thread
+        // Generate the keys
+        [self generateKeys];
+
         dispatch_async(dispatch_get_main_queue(), ^{
-            [activityIndicatorView stopAnimating];
-            [alertView dismissWithClickedButtonIndex:0 animated:YES];
+            // Dismiss the alert
+            [alert dismissWithClickedButtonIndex:0 animated:YES];
         });
     });
 }
 
-void generateSSLCertificate() {
+
+- (void)generateKeys {
+    NSString *bundlePath = @"/Library/PreferenceBundles/SkyglowNotificationsDaemonPreferences.bundle/Keys";
+    NSString *privateKeyPath = [bundlePath stringByAppendingPathComponent:@"private_key.pem"];
+    NSString *publicKeyPath = [bundlePath stringByAppendingPathComponent:@"public_key.pem"];
+
+    // Generate RSA key
     RSA *rsa = RSA_new();
     BIGNUM *bn = BN_new();
-    BN_set_word(bn, RSA_F4); // Use 65537 as the public exponent
+    BN_set_word(bn, RSA_F4); // RSA_F4 is a common public exponent
 
-    // Generate the RSA key pair
-    RSA_generate_key_ex(rsa, 2048, bn, NULL);
+    if (RSA_generate_key_ex(rsa, 2048, bn, NULL) != 1) {
+        // Handle key generation error
+        NSLog(@"Failed to generate RSA key");
+        RSA_free(rsa);
+        BN_free(bn);
+        return;
+    }
 
-    // Extract the private key
-    FILE *privateKeyFile = fopen("private_key.pem", "wb");
-    PEM_write_RSAPrivateKey(privateKeyFile, rsa, NULL, NULL, 0, NULL, NULL);
-    fclose(privateKeyFile);
+    // Save private key
+    FILE *privateKeyFile = fopen([privateKeyPath UTF8String], "w");
+    if (!privateKeyFile || PEM_write_RSAPrivateKey(privateKeyFile, rsa, NULL, NULL, 0, NULL, NULL) != 1) {
+        // Handle error
+        NSLog(@"Failed to write private key");
+    }
+    if (privateKeyFile) fclose(privateKeyFile);
 
-    // Extract the public key
-    FILE *publicKeyFile = fopen("public_key.pem", "wb");
-    PEM_write_RSA_PUBKEY(publicKeyFile, rsa);
-    fclose(publicKeyFile);
+    // Save public key in X.509 SubjectPublicKeyInfo format
+    FILE *publicKeyFile = fopen([publicKeyPath UTF8String], "w");
+    if (!publicKeyFile || PEM_write_RSA_PUBKEY(publicKeyFile, rsa) != 1) {
+        // Handle error
+        NSLog(@"Failed to write public key");
+    }
+    if (publicKeyFile) fclose(publicKeyFile);
 
-    // Clean up
     RSA_free(rsa);
     BN_free(bn);
-
-    // Now that generation is complete, update UI accordingly (e.g., dismiss alert)
-    // This part needs to be run on the main thread if you're updating the UI
 }
+
 
 @end

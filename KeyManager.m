@@ -87,14 +87,13 @@ void requestKeyRefresh() {
 }
 
 
-
 NSString *decryptWithPrivateKey(NSString *encryptedDataString) {
     NSLog(@"Decrypting with private key");
     // Convert the base64 encoded string to NSData
     NSData *encryptedData = OpenSSLBase64Decode(encryptedDataString);
     
     // Assuming the private key file is named "private_key.pem" and included in the app bundle
-    NSBundle *bundle = [[NSBundle alloc] initWithPath:kBundlePath];
+    NSBundle *bundle = [[NSBundle alloc] initWithPath:@"/Library/PreferenceBundles/SkyglowNotificationsDaemonPreferences.bundle/Keys"];
     NSString *keyPath = [bundle pathForResource:@"private_key" ofType:@"pem"];
     FILE *keyFile = fopen([keyPath UTF8String], "r");
     if (!keyFile) {

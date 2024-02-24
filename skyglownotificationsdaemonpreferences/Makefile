@@ -7,7 +7,7 @@ BUNDLE_NAME = SkyglowNotificationsDaemonPreferences
 
 SkyglowNotificationsDaemonPreferences_FILES = SNRootListController.m SNGuideViewController.m SNRegisterAppViewController.m SNUnregisterAppViewController.m
 SkyglowNotificationsDaemonPreferences_FRAMEWORKS = UIKit
-SkyglowNotificationsDaemonPreferences_PRIVATE_FRAMEWORKS = Preferences
+SkyglowNotificationsDaemonPreferences_PRIVATE_FRAMEWORKS = Preferences CoreGraphics
 SkyglowNotificationsDaemonPreferences_LIBRARIES = applist ssl crypto
 SkyglowNotificationsDaemonPreferences_INSTALL_PATH = /Library/PreferenceBundles
 SkyglowNotificationsDaemonPreferences_CFLAGS = -fobjc-arc -Wno-arc-performSelector-leaks

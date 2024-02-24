@@ -241,7 +241,6 @@ static void cleanUp() {
         // Set up new darwin notification listener for registering and testing the app
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, checkAndRegisterApplication, CFSTR("com.Skyglow.Notifications.register"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, checkAndUnregisterApplication, CFSTR("com.Skyglow.Notifications.unregister"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, testServerConnection, CFSTR("com.Skyglow.Notifications.testConnection"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         return;
     }
     

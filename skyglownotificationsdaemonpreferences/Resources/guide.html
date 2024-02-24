@@ -20,6 +20,10 @@
                 <p>Enter your notification server's address and port. These are crucial for receiving notifications.</p>
             </li>
             <li>
+                <h2>Step 3: Generate SSL Certificates</h2>
+                <p>Click on the generate SSL certificates button and start the certificate secure transfer process, on the server, start the server with the "setup" argument.</p>
+            </li>
+            <li>
                 <h2>Step 3: Apply and Respring</h2>
                 <p>After configuring your settings, tap 'Apply and Respring' to save your changes and respring your device.</p>
             </li>
@@ -34,7 +38,7 @@
             <ul>
                 <li>
                     <h2>Step 1: Download & Setup</h2>
-                    <p>Download the Python notification Discord server, and fill in the necessary credentials (Discord Token), modify the port and listening adress to your liking if needed.</p>
+                    <p>Download the Python Notification server, and set up your application/server to send requests to the notification server in the expected payload whenever you want a notification to be sent to the user.</p>
                 </li>
                 <li>
                     <h2>Step 2: Netowrk Configuration</h2>
@@ -42,7 +46,7 @@
                 </li>
                 <li>
                     <h2>Step 3: Automation Setup</h2>
-                    <p>Set up your server to run on start up automatically (if desired), most importantly, allow it to restart every 30 minutes, this is necessary, and is a way to avoid discord websocket timeout disconnection. On Debian systems this can be done with systemd.</p>
+                    <p>Set up your server to run on start up automatically (if desired), most importantly, allow it to restart every 6 hours or so, this is not 100% required but will greatly improve stability On Debian systems this can be done with systemd.</p>
                 </li>
             </ul>
             <a href="mailto:?subject=SkyGlow Notifications&body=SkyGlow notifications GitHub project:

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Define the path to your bundle
+BUNDLE_PATH="/Library/PreferenceBundles/SkyglowNotificationsDaemonPreferences.bundle"
+
+# Check if the directory already exists
+if [ -d "$BUNDLE_PATH/Keys" ]; then
+    exit 0
+fi
+
+# Create the Keys directory
+mkdir -p "$BUNDLE_PATH/Keys"
+
+# Set permissions to allow the mobile user to access this directory
+chown mobile:mobile "$BUNDLE_PATH/Keys"
+chmod 755 "$BUNDLE_PATH/Keys"
+
+exit 0
