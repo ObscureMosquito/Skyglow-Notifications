@@ -19,7 +19,7 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    self.tableView.frame = self.view.bounds; // Adjust the frame to match the parent view
+    self.tableView.frame = self.view.bounds;
 }
 
 
@@ -106,7 +106,7 @@
     NSLog(@"Registering application: %@", bundleIdentifier);
     // Set the bundle id as the last registered app in the preferences
     NSDictionary *prefs = [[NSUserDefaults standardUserDefaults] persistentDomainForName:@"com.skyglow.sndp"];
-    NSMutableDictionary *mutablePrefs = [prefs mutableCopy]; // Create a mutable copy of the dictionary
+    NSMutableDictionary *mutablePrefs = [prefs mutableCopy];
     [mutablePrefs setValue:bundleIdentifier forKey:@"lastRegisteredApp"];
     [[NSUserDefaults standardUserDefaults] setPersistentDomain:mutablePrefs forName:@"com.skyglow.sndp"];
     [[NSUserDefaults standardUserDefaults] synchronize];

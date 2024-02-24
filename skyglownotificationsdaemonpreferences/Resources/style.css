@@ -18,8 +18,8 @@ body {
     overflow: hidden;
     max-height: 0;
     transition: max-height 0.2s ease-out;
-    margin: 0 auto; /* Centers the button horizontally */
-    display: block; /* Ensures the margin auto takes effect */
+    margin: 0 auto;
+    display: block;
 }
 
 .collapsible {
@@ -36,8 +36,8 @@ body {
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
     outline: none;
-    margin: 0 auto; /* Centers the button horizontally */
-    display: block; /* Ensures the margin auto takes effect */
+    margin: 0 auto;
+    display: block;
     
 }
 
@@ -50,10 +50,9 @@ body {
     border-radius: 11px;
     font-size: 16px;
     text-align: center;
-    margin: 0 auto; /* Centers the button horizontally */
-    display: block; /* Ensures the margin auto takes effect */
+    margin: 0 auto;
+    display: block;
 }
-
 
 .servertitle {
     font-size: 16px;

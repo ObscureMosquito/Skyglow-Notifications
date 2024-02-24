@@ -21,7 +21,7 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    self.tableView.frame = self.view.bounds; // Adjust the frame to match the parent view
+    self.tableView.frame = self.view.bounds;
 }
 
 
