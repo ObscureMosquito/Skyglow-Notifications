@@ -7,3 +7,4 @@ Maintainer: Requis
 Author: Requis
 Section: Tweaks
 Depends: mobilesubstrate (>= 0.9.5000), firmware (>=5.0), com.rpetrich.rocketbootstrap (>= 1.0.3) | firmware (<< 7.0)
+Depiction: http://cydia.skyglow.es/depictions/?p=com.skyglow.snd
